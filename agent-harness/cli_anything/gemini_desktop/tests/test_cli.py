@@ -37,11 +37,7 @@ def test_cli_session_json():
     assert "exists" in data
 
 
-def test_cli_bridge_file_json(tmp_path, monkeypatch):
-    from cli_anything.gemini_desktop.core import backend
-    monkeypatch.setattr(backend, "send_prompt", lambda **kwargs: {
-        "success": True, "submitted": kwargs["submit"], "prompt_length": len(kwargs["text"]),
-    })
+def test_cli_bridge_file_json(tmp_path):
     fake_file = tmp_path / "spec.md"
     fake_file.write_text("# Spec de Teste", encoding="utf-8")
     runner = CliRunner()
