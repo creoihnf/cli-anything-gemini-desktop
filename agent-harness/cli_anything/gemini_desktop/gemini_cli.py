@@ -274,6 +274,42 @@ def ask(ctx, prompt: str, timeout: int, focus: bool, offscreen: bool):
     emit(data, json_mode, format_human)
 
 
+@cli.command("deep-research")
+@click.argument("prompt", required=True)
+@click.option("--submit/--no-submit", default=True, help="Submit the research request or leave it as a draft.")
+@click.option("--focus/--keep-focus", default=False, help="Leave Gemini in focus instead of restoring your window.")
+@click.option("--offscreen/--visible", default=False, help="Hide the window off-screen (default: visible for plan review).")
+@json_option
+@click.pass_context
+def deep_research(ctx, prompt: str, submit: bool, focus: bool, offscreen: bool):
+    """Select Deep Research and request a research plan in Gemini Desktop.
+
+    Review the plan and start the research in Gemini. This command does not wait
+    for the final report or automatically approve the research plan.
+    """
+    json_mode = ctx.obj.get("json_mode", False)
+    data = backend.send_prompt(
+        text=prompt, submit=submit, keep_focus=not focus,
+        offscreen=offscreen, deep_research=True,
+    )
+    if not data.get("success"):
+        emit(data, json_mode)
+        ctx.exit(1)
+    data.update({
+        "mode": "deep-research",
+        "status": "requested" if submit else "draft",
+        "research_completed": False,
+        "next_step": "Review the research plan in Gemini and choose Start research when ready."
+        if submit else "Submit the draft in Gemini, then review the research plan.",
+    })
+
+    def format_human(d):
+        click.echo("Deep Research request submitted." if submit else "Deep Research draft prepared.")
+        click.echo(d["next_step"])
+
+    emit(data, json_mode, format_human)
+
+
 @cli.command("delegate")
 @click.argument("instruction", required=True)
 @click.option("--file", "-f", "file_path", default=None, help="Attach file content as context for delegation.")
@@ -327,7 +363,7 @@ def delegate(ctx, instruction: str, file_path: str, timeout: int, focus: bool, o
     def format_human(d):
         click.echo("=== Resposta do Gemini Desktop ===")
         click.echo(d["response"])
-        click.echo("\n=== Ordens Despachadas para a Fila (00-Sistema/fila/) ===")
+        click.echo("\n=== Ordens Despachadas para a Fila Configurada ===")
         if d["orders"]:
             for o in d["orders"]:
                 click.echo(f"  [+] Ordem: {o['id']} ({o['titulo']})")

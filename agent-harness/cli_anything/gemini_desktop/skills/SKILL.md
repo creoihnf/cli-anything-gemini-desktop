@@ -5,7 +5,7 @@ description: Conversar diretamente com o Gemini Desktop no terminal e delegar ta
 
 # Gemini Desktop CLI-Anything Skill
 
-Este skill permite conversar diretamente com o cliente oficial do **Google Gemini Desktop** no Windows via terminal (com resposta exibida no stdout) e utilizá-lo como arquiteto principal para planejar e delegar tarefas automaticamente aos agentes operacionais (**Claude Code**, **Codex** e **Antigravity/IDE**) através da fila `00-Sistema/fila/`, consumindo **zero tokens da IDE**.
+Este skill permite conversar com o **Google Gemini Desktop** no Windows via terminal, pedir Deep Research e exportar tarefas para uma fila configurável.
 
 ## 🚀 Principais Comandos
 
@@ -21,7 +21,7 @@ cli-anything-gemini-desktop ask "Qual a diferença entre latência e throughput?
 ---
 
 ### 2. Delegação Automática com Créditos do Gemini (`delegate`)
-Usa o raciocínio e a cota do Gemini Desktop (gratuita/pro do app oficial) para tomar decisões de arquitetura e emitir ordens executivas diretamente para a fila do `despachante.py` (`00-Sistema/fila/`):
+Usa o raciocínio e a cota do Gemini Desktop para tomar decisões de arquitetura e emitir ordens para uma fila opcional, configurada em `GEMINI_DESKTOP_QUEUE_DIR` (diretório existente):
 ```bash
 cli-anything-gemini-desktop delegate "Refatore o componente Navbar para mobile"
 ```
@@ -31,12 +31,24 @@ cli-anything-gemini-desktop delegate -f "docs/especificacao.md" "Analise a spec 
 ```
 *O que acontece:*
 1. O Gemini Desktop analisa a solicitação e formula a arquitetura.
-2. Gera blocos de código ```json no schema oficial da fila do LLM-OS:
+2. Gera blocos de código JSON no formato da fila configurada:
    - `peso_3` / `claude` ➔ Claude Code (frontend, UX, design).
    - `peso_3` / `codex` ➔ Codex (auditoria crítica).
    - `peso_2` / `agy` ➔ Antigravity (scripts, testes na IDE).
-3. O CLI salva automaticamente cada ordem em `00-Sistema/fila/<id>.json`.
-4. O `despachante.py` assume e orquestra a execução.
+3. Quando a fila está configurada, o CLI salva cada ordem em `<GEMINI_DESKTOP_QUEUE_DIR>/<id>.json`.
+4. Um executor externo pode consumir esses arquivos. Sem a variável, nenhuma ordem é salva.
+
+### Deep Research (`deep-research`)
+
+```powershell
+cli-anything-gemini-desktop deep-research "Compare fornecedores de energia solar" --json
+```
+
+Seleciona a ferramenta Deep Research pela acessibilidade do Windows antes de
+enviar o pedido. Falha sem enviar uma pergunta comum quando não consegue confirmar
+a seleção. Revise o plano no Gemini e clique em iniciar pesquisa quando estiver
+pronto. O comando não aprova o plano nem coleta o relatório final.
+Use `--no-submit` para preparar um rascunho. A janela fica visível por padrão.
 
 ---
 
@@ -72,6 +84,7 @@ cli-anything-gemini-desktop delegate -f "docs/especificacao.md" "Analise a spec 
   ```
 
 ## 🛡️ Garantias de Usabilidade e Modo Stealth
+- **Deep Research:** Exceção ao modo off-screen por padrão: a janela fica visível para seleção da ferramenta e revisão do plano. A seleção pode levar até 15 segundos.
 - **Zero ocupação de tela (Off-screen):** A janela do Gemini opera fora da área visível do monitor (`30000, 30000`) e é ocultada de volta à bandeja (`SW_HIDE`) ao concluir. O usuário nunca tem sua tela coberta.
 - **Zero perturbação do mouse:** O cursor do usuário não é deslocado na sua tela visível e o estado é preservado.
 - **Zero perda de área de transferência:** O conteúdo original do clipboard do usuário é salvo e restaurado imediatamente.

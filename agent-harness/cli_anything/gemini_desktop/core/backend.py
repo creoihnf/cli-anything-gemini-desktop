@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from cli_anything.gemini_desktop.core.settings import load_settings
+from cli_anything.gemini_desktop.core.research import select_deep_research
 
 
 # Configure 64-bit safe Win32 API prototypes
@@ -33,7 +34,7 @@ user32.ShowWindow.restype = wintypes.BOOL
 OFFSCREEN_X = 30000
 OFFSCREEN_Y = 30000
 
-DELEGATION_PROMPT_PREFIX = """Você é o arquiteto chefe do sistema LLM-OS.
+DELEGATION_PROMPT_PREFIX = """Você é o arquiteto responsável pelo projeto atual.
 Analise a solicitação abaixo e tome as decisões de arquitetura e alinhamento.
 Para quaisquer tarefas que precisem ser executadas pelos agentes operacionais (Claude Code, Codex ou IDE/Antigravity), gere ao final da sua resposta um ou mais blocos ```json com o seguinte schema de ordem para o nosso despachante:
 
@@ -43,7 +44,7 @@ Para quaisquer tarefas que precisem ser executadas pelos agentes operacionais (C
   "titulo": "<titulo da tarefa>",
   "peso": "peso_3",
   "comando": "claude",
-  "cwd": "C:\\\\Users\\\\ferna\\\\llm-os",
+  "cwd": ".",
   "prompt": "<instruções completas para o agente executar>"
 }
 ```
@@ -429,7 +430,18 @@ def ensure_gemini_window(offscreen: bool = True) -> Optional[int]:
     return hwnd
 
 
-def send_prompt(text: str, submit: bool = True, keep_focus: bool = True, offscreen: bool = True) -> Dict[str, Any]:
+def show_research_window(hwnd: int) -> None:
+    """Expose the tool picker, including windows left off-screen by an earlier ask."""
+    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+    rect = wintypes.RECT()
+    user32.GetWindowRect(hwnd, ctypes.byref(rect))
+    if rect.left >= OFFSCREEN_X or rect.top >= OFFSCREEN_Y:
+        # SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+        user32.SetWindowPos(hwnd, 0, 100, 100, 0, 0, 0x0001 | 0x0004 | 0x0010)
+    force_foreground_window(hwnd)
+
+
+def send_prompt(text: str, submit: bool = True, keep_focus: bool = True, offscreen: bool = True, deep_research: bool = False) -> Dict[str, Any]:
     """Injeta prompt no Gemini Desktop sem perturbar o usuário, restaurando mouse, foco e clipboard imediatamente."""
     if not text:
         return {"success": False, "error": "Prompt text cannot be empty"}
@@ -443,9 +455,17 @@ def send_prompt(text: str, submit: bool = True, keep_focus: bool = True, offscre
     orig_clip = get_clipboard()
 
     # 2. Localizar/instanciar janela e garantir que fique fora da tela (30000, 30000)
-    hwnd = ensure_gemini_window(offscreen=offscreen)
+    hwnd = ensure_gemini_window(offscreen=False if deep_research else offscreen)
     if not hwnd:
         return {"success": False, "error": "Gemini Desktop window not found"}
+
+    if deep_research:
+        show_research_window(hwnd)
+        selection = select_deep_research(hwnd)
+        if not selection.get("success"):
+            if keep_focus and orig_fg and orig_fg != hwnd:
+                restore_foreground_window(orig_fg)
+            return {"success": False, "error": selection.get("error", "Could not select Deep Research.")}
 
     if offscreen:
         move_gemini_offscreen(hwnd)
@@ -671,22 +691,12 @@ def wait_for_gemini_response(prompt: str, max_wait: float = 90.0, callback=None,
 
 
 def get_fila_dir() -> Optional[Path]:
-    """Localiza o diretório 00-Sistema/fila/ do vault."""
-    try:
-        import sys
-        llmos_path = Path("C:/Users/ferna/llm-os")
-        if str(llmos_path) not in sys.path:
-            sys.path.insert(0, str(llmos_path))
-        from llmos import caminhos_vault as cv
-        fila = cv.VAULT_ROOT / "00-Sistema" / "fila"
-        if fila.is_dir():
-            return fila
-    except Exception:
-        pass
-
-    fallback = Path(r"G:\O meu disco\Hermes + Code(x) + CLI\00-Sistema\fila")
-    if fallback.is_dir():
-        return fallback
+    """Return the explicitly configured task queue, if it exists."""
+    configured = os.environ.get("GEMINI_DESKTOP_QUEUE_DIR")
+    if configured:
+        queue = Path(configured).expanduser()
+        if queue.is_dir():
+            return queue
     return None
 
 
@@ -707,7 +717,7 @@ def dispatch_delegated_orders(response_text: str) -> List[Dict[str, Any]]:
                 order_id = data.get("id") or f"ordem_gemini_{int(time.time())}_{idx+1}"
                 data["id"] = order_id
                 if "cwd" not in data:
-                    data["cwd"] = r"C:\Users\ferna\llm-os"
+                    data["cwd"] = str(Path.cwd())
 
                 file_path = fila_dir / f"{order_id}.json"
                 with open(file_path, "w", encoding="utf-8") as f:

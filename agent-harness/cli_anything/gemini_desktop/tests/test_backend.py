@@ -30,7 +30,7 @@ def test_extract_response():
 
 def test_extract_response_multiline():
     prompt = (
-        "Você é o arquiteto chefe do sistema LLM-OS.\n"
+        "Você é o arquiteto responsável pelo projeto atual.\n"
         "Analise o sistema e delegue ordens.\n"
         "Solicitação:\n"
         "Crie a navbar"
